@@ -96,7 +96,6 @@ def text_to_audio(text):
         audio_bytes.seek(0)
         return audio_bytes
     except Exception as e:
-        # Show actual error if audio fails
         st.sidebar.error(f"Audio Generation Failed: {e}")
         return None
 
@@ -141,18 +140,32 @@ def main():
 
         with tab2:
             st.header("Manage Chat")
-            chat_text = "=== ⚡ CleverDocs History ⚡ ===\n\n"
-            for msg in st.session_state.messages:
-                role = "👤 USER" if msg["role"] == "user" else "🤖 AI"
-                chat_text += f"{role}:\n{msg['content']}\n\n"
-                chat_text += "-" * 30 + "\n\n"
             
-            st.download_button(label="📄 Download Chat (.txt)", data=chat_text, file_name="cleverdocs_chat.txt", mime="text/plain")
+            # --- DYNAMIC DOWNLOAD FIX ---
+            if st.session_state.messages:
+                chat_text = "=== ⚡ CleverDocs History ⚡ ===\n\n"
+                for msg in st.session_state.messages:
+                    role = "👤 USER" if msg["role"] == "user" else "🤖 AI"
+                    chat_text += f"{role}:\n{msg['content']}\n\n"
+                    chat_text += "-" * 30 + "\n\n"
+                
+                # Unique key ensures button data is always fresh
+                st.download_button(
+                    label="📄 Download Chat (.txt)", 
+                    data=chat_text, 
+                    file_name="cleverdocs_chat.txt", 
+                    mime="text/plain",
+                    key=f"download_btn_{len(st.session_state.messages)}"
+                )
+            else:
+                st.info("No chat history found.")
+                
             st.markdown("---")
             if st.button("🛑 Clear Conversation"):
                 st.session_state.messages = []
                 st.rerun()
 
+    # Chat UI
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
@@ -184,12 +197,14 @@ def main():
                 
                 message_placeholder.markdown(full_response)
                 
-                # AUDIO GENERATION
+                # Audio Generation
                 audio_bytes = text_to_audio(full_response)
                 if audio_bytes:
                     st.audio(audio_bytes, format="audio/mp3")
                 
+                # Final save and UI refresh
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
+                st.rerun()
 
 if __name__ == '__main__':
     main()
