@@ -7,8 +7,6 @@ import google.generativeai as genai
 from langchain_text_splitters import CharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from gtts import gTTS
-from io import BytesIO
 
 # --- CONFIGURATION ---
 load_dotenv()
@@ -48,6 +46,7 @@ st.markdown("""
     }
     .stChatMessage { background: rgba(255, 255, 255, 0.05); border-radius: 15px; }
     
+    /* STATUS INDICATORS */
     .status-box { padding: 10px; border-radius: 5px; margin-bottom: 5px; }
     .status-success { background-color: #0e4429; border: 1px solid #00f260; color: #00f260; }
     .status-error { background-color: #4c1d1d; border: 1px solid #ff4b4b; color: #ff4b4b; }
@@ -58,6 +57,7 @@ st.markdown("""
 def get_pdf_text(pdf_docs):
     text = ""
     file_status = [] 
+    
     for pdf in pdf_docs:
         try:
             pdf_reader = PdfReader(pdf)
@@ -66,13 +66,16 @@ def get_pdf_text(pdf_docs):
                 content = page.extract_text()
                 if content:
                     file_text += content
+            
             if not file_text.strip():
                 file_status.append({"name": pdf.name, "status": "failed", "msg": "Empty/Scanned"})
             else:
                 text += file_text + "\n"
                 file_status.append({"name": pdf.name, "status": "success", "msg": "Read Successfully"})
+                
         except Exception as e:
             file_status.append({"name": pdf.name, "status": "failed", "msg": "Error Reading"})
+            
     return text, file_status
 
 def get_text_chunks(text):
@@ -88,17 +91,6 @@ def get_vectorstore(text_chunks):
     vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
     return vectorstore
 
-def text_to_audio(text):
-    try:
-        tts = gTTS(text=text, lang='en', slow=False)
-        audio_bytes = BytesIO()
-        tts.write_to_fp(audio_bytes)
-        audio_bytes.seek(0)
-        return audio_bytes
-    except Exception as e:
-        st.sidebar.error(f"Audio Generation Failed: {e}")
-        return None
-
 def main():
     st.markdown('<div class="neon-text">⚡ CleverDocs</div>', unsafe_allow_html=True)
 
@@ -111,10 +103,14 @@ def main():
 
     with st.sidebar:
         st.title("Welcome 👋")
+        
+        # --- TAB INTERFACE ---
         tab1, tab2 = st.tabs(["📄 Upload", "💾 History"])
         
+        # TAB 1: UPLOAD & PROCESS
         with tab1:
             pdf_docs = st.file_uploader("Upload Files", accept_multiple_files=True, type=['pdf'])
+            
             if st.button("⚡ Initialize System"):
                 if not pdf_docs:
                     st.warning("No files detected.")
@@ -122,14 +118,18 @@ def main():
                     with st.status("Processing...", expanded=True) as status:
                         raw_text, file_report = get_pdf_text(pdf_docs)
                         st.session_state.file_status = file_report 
+                        
                         if not raw_text.strip():
                             status.update(label="⚠️ Critical Failure", state="error")
                             st.error("No readable text found.")
                             st.stop()
+                        
+                        st.write("Chunking & Embedding...")
                         text_chunks = get_text_chunks(raw_text)
                         st.session_state.vectorstore = get_vectorstore(text_chunks)
                         status.update(label="✅ System Online", state="complete")
 
+            # Display File Status
             if st.session_state.file_status:
                 st.markdown("### 📊 File Status")
                 for f in st.session_state.file_status:
@@ -138,29 +138,26 @@ def main():
                     else:
                         st.markdown(f'<div class="status-box status-error">❌ {f["name"]}<br><small>{f["msg"]}</small></div>', unsafe_allow_html=True)
 
+        # TAB 2: HISTORY & DOWNLOAD
         with tab2:
             st.header("Manage Chat")
             
-            # --- DYNAMIC DOWNLOAD FIX ---
-            if st.session_state.messages:
-                chat_text = "=== ⚡ CleverDocs History ⚡ ===\n\n"
-                for msg in st.session_state.messages:
-                    role = "👤 USER" if msg["role"] == "user" else "🤖 AI"
-                    chat_text += f"{role}:\n{msg['content']}\n\n"
-                    chat_text += "-" * 30 + "\n\n"
-                
-                # Unique key ensures button data is always fresh
-                st.download_button(
-                    label="📄 Download Chat (.txt)", 
-                    data=chat_text, 
-                    file_name="cleverdocs_chat.txt", 
-                    mime="text/plain",
-                    key=f"download_btn_{len(st.session_state.messages)}"
-                )
-            else:
-                st.info("No chat history found.")
-                
+            # --- NEW FEATURE: DOWNLOAD TXT ---
+            chat_text = "=== ⚡ CleverDocs History ⚡ ===\n\n"
+            for msg in st.session_state.messages:
+                role = "👤 USER" if msg["role"] == "user" else "🤖 AI"
+                chat_text += f"{role}:\n{msg['content']}\n\n"
+                chat_text += "-" * 30 + "\n\n"
+            
+            st.download_button(
+                label="📄 Download Chat (.txt)",
+                data=chat_text,
+                file_name="cleverdocs_chat.txt",
+                mime="text/plain"
+            )
+            
             st.markdown("---")
+            
             if st.button("🛑 Clear Conversation"):
                 st.session_state.messages = []
                 st.rerun()
@@ -184,9 +181,23 @@ def main():
                 with st.spinner("Thinking..."):
                     docs = st.session_state.vectorstore.similarity_search(prompt)
                     context_text = "\n\n".join([doc.page_content for doc in docs])
-                    history = "".join([f"{m['role'].upper()}: {m['content']}\n" for m in st.session_state.messages[-3:]])
                     
-                    final_prompt = f"History:\n{history}\nContext:\n{context_text}\nQuestion:\n{prompt}"
+                    history = ""
+                    for msg in st.session_state.messages[-3:]:
+                        history += f"{msg['role'].upper()}: {msg['content']}\n"
+                    
+                    final_prompt = f"""
+                    You are CleverDocs. Answer based on Context & History.
+                    
+                    HISTORY:
+                    {history}
+                    
+                    CONTEXT:
+                    {context_text}
+                    
+                    QUESTION:
+                    {prompt}
+                    """
                     
                     try:
                         model = genai.GenerativeModel('gemini-flash-latest')
@@ -196,15 +207,7 @@ def main():
                         full_response = f"Error: {str(e)}"
                 
                 message_placeholder.markdown(full_response)
-                
-                # Audio Generation
-                audio_bytes = text_to_audio(full_response)
-                if audio_bytes:
-                    st.audio(audio_bytes, format="audio/mp3")
-                
-                # Final save and UI refresh
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
-                st.rerun()
 
 if __name__ == '__main__':
     main()
