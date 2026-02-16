@@ -1,6 +1,5 @@
 import streamlit as st
 import os
-import time
 from dotenv import load_dotenv
 from PyPDF2 import PdfReader
 import google.generativeai as genai
@@ -46,7 +45,6 @@ st.markdown("""
     }
     .stChatMessage { background: rgba(255, 255, 255, 0.05); border-radius: 15px; }
     
-    /* STATUS INDICATORS */
     .status-box { padding: 10px; border-radius: 5px; margin-bottom: 5px; }
     .status-success { background-color: #0e4429; border: 1px solid #00f260; color: #00f260; }
     .status-error { background-color: #4c1d1d; border: 1px solid #ff4b4b; color: #ff4b4b; }
@@ -57,7 +55,6 @@ st.markdown("""
 def get_pdf_text(pdf_docs):
     text = ""
     file_status = [] 
-    
     for pdf in pdf_docs:
         try:
             pdf_reader = PdfReader(pdf)
@@ -66,16 +63,13 @@ def get_pdf_text(pdf_docs):
                 content = page.extract_text()
                 if content:
                     file_text += content
-            
             if not file_text.strip():
                 file_status.append({"name": pdf.name, "status": "failed", "msg": "Empty/Scanned"})
             else:
                 text += file_text + "\n"
                 file_status.append({"name": pdf.name, "status": "success", "msg": "Read Successfully"})
-                
         except Exception as e:
             file_status.append({"name": pdf.name, "status": "failed", "msg": "Error Reading"})
-            
     return text, file_status
 
 def get_text_chunks(text):
@@ -94,42 +88,35 @@ def get_vectorstore(text_chunks):
 def main():
     st.markdown('<div class="neon-text">⚡ CleverDocs</div>', unsafe_allow_html=True)
 
-    if "vectorstore" not in st.session_state:
-        st.session_state.vectorstore = None
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-    if "file_status" not in st.session_state:
-        st.session_state.file_status = []
+    # Initialize Session State
+    if "vectorstore" not in st.session_state: st.session_state.vectorstore = None
+    if "messages" not in st.session_state: st.session_state.messages = []
+    if "file_status" not in st.session_state: st.session_state.file_status = []
 
+    # --- SIDEBAR ---
     with st.sidebar:
         st.title("Welcome 👋")
-        
-        # --- TAB INTERFACE ---
         tab1, tab2 = st.tabs(["📄 Upload", "💾 History"])
         
-        # TAB 1: UPLOAD & PROCESS
         with tab1:
             pdf_docs = st.file_uploader("Upload Files", accept_multiple_files=True, type=['pdf'])
-            
             if st.button("⚡ Initialize System"):
-                if not pdf_docs:
-                    st.warning("No files detected.")
-                else:
+                if pdf_docs:
                     with st.status("Processing...", expanded=True) as status:
                         raw_text, file_report = get_pdf_text(pdf_docs)
                         st.session_state.file_status = file_report 
                         
-                        if not raw_text.strip():
+                        if raw_text.strip():
+                            text_chunks = get_text_chunks(raw_text)
+                            st.session_state.vectorstore = get_vectorstore(text_chunks)
+                            status.update(label="✅ System Online", state="complete")
+                        else:
                             status.update(label="⚠️ Critical Failure", state="error")
                             st.error("No readable text found.")
                             st.stop()
-                        
-                        st.write("Chunking & Embedding...")
-                        text_chunks = get_text_chunks(raw_text)
-                        st.session_state.vectorstore = get_vectorstore(text_chunks)
-                        status.update(label="✅ System Online", state="complete")
+                else:
+                    st.warning("No files detected.")
 
-            # Display File Status
             if st.session_state.file_status:
                 st.markdown("### 📊 File Status")
                 for f in st.session_state.file_status:
@@ -138,40 +125,46 @@ def main():
                     else:
                         st.markdown(f'<div class="status-box status-error">❌ {f["name"]}<br><small>{f["msg"]}</small></div>', unsafe_allow_html=True)
 
-        # TAB 2: HISTORY & DOWNLOAD
         with tab2:
             st.header("Manage Chat")
-            
-            # --- NEW FEATURE: DOWNLOAD TXT ---
-            chat_text = "=== ⚡ CleverDocs History ⚡ ===\n\n"
-            for msg in st.session_state.messages:
-                role = "👤 USER" if msg["role"] == "user" else "🤖 AI"
-                chat_text += f"{role}:\n{msg['content']}\n\n"
-                chat_text += "-" * 30 + "\n\n"
-            
-            st.download_button(
-                label="📄 Download Chat (.txt)",
-                data=chat_text,
-                file_name="cleverdocs_chat.txt",
-                mime="text/plain"
-            )
-            
+            # Dynamic Download Button logic
+            if st.session_state.messages:
+                chat_text = "=== ⚡ CleverDocs History ⚡ ===\n\n"
+                for msg in st.session_state.messages:
+                    role = "👤 USER" if msg["role"] == "user" else "🤖 AI"
+                    chat_text += f"{role}:\n{msg['content']}\n\n" + ("-" * 30) + "\n\n"
+                
+                # The 'key' forces the button to refresh whenever the message count changes
+                st.download_button(
+                    label="📄 Download Chat (.txt)",
+                    data=chat_text,
+                    file_name="cleverdocs_chat.txt",
+                    mime="text/plain",
+                    key=f"download_btn_{len(st.session_state.messages)}"
+                )
+            else:
+                st.info("No chat history to download.")
+                
             st.markdown("---")
-            
             if st.button("🛑 Clear Conversation"):
                 st.session_state.messages = []
                 st.rerun()
 
-    # Chat UI
+    # --- 1. PERSISTENT CHAT RENDER (The Fix) ---
+    # We draw the history FIRST, before processing any new input.
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
+    # --- 2. CHAT INPUT ---
     if prompt := st.chat_input("Ask about your documents..."):
+        # Add user message to state and immediately rerun to render it above
         st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+        st.rerun()
 
+    # --- 3. AI RESPONSE LOGIC ---
+    # Only run if the last message was from the User
+    if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
         if st.session_state.vectorstore is None:
             with st.chat_message("assistant"):
                 st.error("⚠️ Please upload and process documents first.")
@@ -179,25 +172,19 @@ def main():
             with st.chat_message("assistant"):
                 message_placeholder = st.empty()
                 with st.spinner("Thinking..."):
-                    docs = st.session_state.vectorstore.similarity_search(prompt)
+                    user_prompt = st.session_state.messages[-1]["content"]
+                    
+                    # RAG Search
+                    docs = st.session_state.vectorstore.similarity_search(user_prompt)
                     context_text = "\n\n".join([doc.page_content for doc in docs])
                     
-                    history = ""
-                    for msg in st.session_state.messages[-3:]:
-                        history += f"{msg['role'].upper()}: {msg['content']}\n"
+                    # Build Contextual Prompt
+                    history_str = ""
+                    # Grab last 2 exchanges for context
+                    for m in st.session_state.messages[-5:-1]:
+                        history_str += f"{m['role'].upper()}: {m['content']}\n"
                     
-                    final_prompt = f"""
-                    You are CleverDocs. Answer based on Context & History.
-                    
-                    HISTORY:
-                    {history}
-                    
-                    CONTEXT:
-                    {context_text}
-                    
-                    QUESTION:
-                    {prompt}
-                    """
+                    final_prompt = f"History:\n{history_str}\nContext:\n{context_text}\nQuestion:\n{user_prompt}"
                     
                     try:
                         model = genai.GenerativeModel('gemini-flash-latest')
@@ -206,8 +193,14 @@ def main():
                     except Exception as e:
                         full_response = f"Error: {str(e)}"
                 
+                # Show Result
                 message_placeholder.markdown(full_response)
+                
+                # Save to History
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
+                
+                # Rerun to update Sidebar Download Button
+                st.rerun()
 
 if __name__ == '__main__':
     main()
