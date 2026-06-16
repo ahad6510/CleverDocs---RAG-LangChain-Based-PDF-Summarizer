@@ -4,7 +4,7 @@
 
 **CleverDocs** is a production-ready, dark-mode **RAG (Retrieval-Augmented Generation)** application that transforms how you interact with your PDFs. Moving beyond simple text extraction, CleverDocs features secure authentication, global rate limiting, and an advanced AI-OCR fallback system to read even the most complex, messy, or handwritten documents (like tickets and receipts) with surgical precision. 🧠💨
 
-🚀 LIVE APP: https://cleverdocs---rag-langchain-based-pdf-summarizer-cdetlxutxrsnzq.streamlit.app/
+**🚀 [Launch CleverDocs Live**](https://cleverdocs---rag-langchain-based-pdf-summarizer-cdetlxutxrsnzq.streamlit.app/)
 
 ---
 
