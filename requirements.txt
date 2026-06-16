@@ -1,8 +1,13 @@
 streamlit
+streamlit-cookies-controller
 python-dotenv
-PyPDF2
-google-generativeai
+google-genai
 langchain-text-splitters
 langchain-community
 faiss-cpu
 sentence-transformers
+pymupdf
+streamlit-oauth
+PyJWT
+torchvision
+pdfplumber
