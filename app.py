@@ -3,11 +3,11 @@ import os
 import jwt
 import tempfile
 import json
-import time  # <-- NEW IMPORT
+import time
 from datetime import date
 from dotenv import load_dotenv
 import pdfplumber
-from google import genai  # <-- NEW GOOGLE SDK
+from google import genai
 from langchain_text_splitters import CharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
@@ -18,11 +18,9 @@ from streamlit_cookies_controller import CookieController
 DB_FILE = "global_quota.json"
 
 def get_global_quota():
-    """Fetches the shared app quota, resetting to 20 if it is a new day."""
     today = str(date.today())
     if not os.path.exists(DB_FILE):
         return 20
-        
     with open(DB_FILE, "r") as f:
         try:
             data = json.load(f)
@@ -33,7 +31,6 @@ def get_global_quota():
             return 20
 
 def update_global_quota(new_quota):
-    """Saves the new shared quota and today's date."""
     today = str(date.today())
     data = {"date": today, "quota": new_quota}
     with open(DB_FILE, "w") as f:
@@ -47,20 +44,16 @@ client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
 redirect_uri = os.getenv("REDIRECT_URI", "http://localhost:8501/component/streamlit_oauth.authorize_button")
 
 if not api_key:
-    try:
-        if "GOOGLE_API_KEY" in st.secrets:
-            api_key = st.secrets["GOOGLE_API_KEY"]
-            client_id = st.secrets.get("GOOGLE_CLIENT_ID", client_id)
-            client_secret = st.secrets.get("GOOGLE_CLIENT_SECRET", client_secret)
-            redirect_uri = st.secrets.get("REDIRECT_URI", redirect_uri)
-    except:
-        pass 
+    if "GOOGLE_API_KEY" in st.secrets:
+        api_key = st.secrets["GOOGLE_API_KEY"]
+        client_id = st.secrets.get("GOOGLE_CLIENT_ID", client_id)
+        client_secret = st.secrets.get("GOOGLE_CLIENT_SECRET", client_secret)
+        redirect_uri = st.secrets.get("REDIRECT_URI", redirect_uri)
 
 if not api_key:
     st.error("CRITICAL ERROR: GOOGLE_API_KEY not found.")
     st.stop()
 
-# Initialize the NEW Gemini Client
 try:
     gemini_client = genai.Client(api_key=api_key)
 except Exception as e:
@@ -68,37 +61,22 @@ except Exception as e:
     st.stop()
 
 # --- PAGE CONFIG ---
-st.set_page_config(
-    page_title="CleverDocs",
-    page_icon="⚡",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="CleverDocs", page_icon="⚡", layout="wide", initial_sidebar_state="expanded")
 
 # --- CSS STYLES ---
 st.markdown("""
 <style>
     .stApp { background-color: #0e1117; color: #ffffff; }
     [data-testid="stSidebar"] { background-color: #161b22; }
-    .neon-text {
-        font-size: 3.5rem; font-weight: 800;
-        background: -webkit-linear-gradient(45deg, #00f260, #0575E6);
-        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        text-align: center; margin-bottom: 30px;
-    }
-    .login-container {
-        max-width: 400px; margin: 0 auto; padding: 40px 20px;
-        background: rgba(255, 255, 255, 0.05); border-radius: 15px;
-        border: 1px solid rgba(255, 255, 255, 0.1); text-align: center;
-    }
-    .stChatMessage { background: rgba(255, 255, 255, 0.05); border-radius: 15px; }
+    .neon-text { font-size: 3.5rem; font-weight: 800; background: -webkit-linear-gradient(45deg, #00f260, #0575E6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-align: center; margin-bottom: 30px; }
+    .login-container { max-width: 400px; margin: 0 auto; padding: 40px 20px; background: rgba(255, 255, 255, 0.05); border-radius: 15px; border: 1px solid rgba(255, 255, 255, 0.1); text-align: center; }
     .status-box { padding: 10px; border-radius: 5px; margin-bottom: 5px; }
     .status-success { background-color: #0e4429; border: 1px solid #00f260; color: #00f260; }
     .status-error { background-color: #4c1d1d; border: 1px solid #ff4b4b; color: #ff4b4b; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- LOGIC FUNCTIONS ---
+# --- LOGIC FUNCTIONS (RESTORED) ---
 def get_pdf_text(pdf_docs):
     text = ""
     file_status = [] 
@@ -163,8 +141,11 @@ def get_vectorstore(text_chunks):
     return vectorstore
 
 def main():
-    # --- INITIALIZE COOKIE CONTROLLER ---
-    cookies = CookieController()
+    # --- SAFE COOKIE INITIALIZATION ---
+    try:
+        cookies = CookieController()
+    except Exception:
+        cookies = None
 
     # Initialize Session States
     if "vectorstore" not in st.session_state: st.session_state.vectorstore = None
@@ -175,21 +156,21 @@ def main():
     if "user_picture" not in st.session_state: st.session_state.user_picture = None
 
     # --- CHECK BROWSER COOKIES FOR EXISTING LOGIN ---
-    if st.session_state.user_email is None:
-        saved_email = cookies.get("user_email")
-        if saved_email:
-            st.session_state.user_email = saved_email
-            st.session_state.user_name = cookies.get("user_name")
-            st.session_state.user_picture = cookies.get("user_picture")
+    if st.session_state.user_email is None and cookies is not None:
+        try:
+            saved_email = cookies.get("user_email")
+            if saved_email:
+                st.session_state.user_email = saved_email
+                st.session_state.user_name = cookies.get("user_name")
+                st.session_state.user_picture = cookies.get("user_picture")
+        except Exception:
+            pass
 
     # --- 1. OAUTH GATEKEEPER ---
     if st.session_state.user_email is None:
         
-        # Check if Google is currently redirecting us back with login credentials
         is_oauth_callback = "code" in st.query_params and "state" in st.query_params
         
-        # --- ANTI-FLASH LOADING BUFFER ---
-        # Skip the buffer completely if we are in the middle of a login handshake
         if "cookie_sync_done" not in st.session_state and not is_oauth_callback:
             st.session_state.cookie_sync_done = True
             st.markdown('<div class="neon-text">⚡ CleverDocs</div>', unsafe_allow_html=True)
@@ -197,7 +178,6 @@ def main():
                 time.sleep(0.6)  
             st.rerun()  
         
-        # If the script gets past the rerun, it means no cookies exist. Show Login safely.
         else:
             st.markdown('<div class="neon-text">⚡ CleverDocs</div>', unsafe_allow_html=True)
             
@@ -208,9 +188,9 @@ def main():
             AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
             TOKEN_URL = "https://oauth2.googleapis.com/token"
             REFRESH_TOKEN_URL = "https://oauth2.googleapis.com/token"
-            REVOKE_TOKEN_URL = "https://oauth2.googleapis.com/revoke"
             
-            oauth2 = OAuth2Component(client_id, client_secret, AUTHORIZE_URL, TOKEN_URL, REFRESH_TOKEN_URL, REVOKE_TOKEN_URL)
+            # None replaces REVOKE_TOKEN_URL to fix httpx_oauth error
+            oauth2 = OAuth2Component(client_id, client_secret, AUTHORIZE_URL, TOKEN_URL, REFRESH_TOKEN_URL, None)
             
             col1, col2, col3 = st.columns([1, 2, 1])
             with col2:
@@ -241,10 +221,10 @@ def main():
                     else:
                         st.session_state.user_name = google_name
                     
-                    # --- SAVE LOGIN TO COOKIES (Expires in 7 days) ---
-                    cookies.set("user_email", st.session_state.user_email, max_age=604800)
-                    cookies.set("user_name", st.session_state.user_name, max_age=604800)
-                    cookies.set("user_picture", st.session_state.user_picture, max_age=604800)
+                    if cookies is not None:
+                        cookies.set("user_email", st.session_state.user_email, max_age=604800)
+                        cookies.set("user_name", st.session_state.user_name, max_age=604800)
+                        cookies.set("user_picture", st.session_state.user_picture, max_age=604800)
                     
                     st.query_params.clear()
                     st.rerun()
@@ -270,12 +250,13 @@ def main():
             
             if st.button("🚪 Secure Logout", use_container_width=True):
                 # --- SAFELY DELETE COOKIES ON LOGOUT ---
-                cookie_keys = ["user_email", "user_name", "user_picture"]
-                for key in cookie_keys:
-                    try:
-                        cookies.remove(key)
-                    except KeyError:
-                        pass
+                if cookies is not None:
+                    cookie_keys = ["user_email", "user_name", "user_picture"]
+                    for key in cookie_keys:
+                        try:
+                            cookies.remove(key)
+                        except KeyError:
+                            pass
                 
                 st.session_state.user_email = None
                 st.session_state.user_name = None
@@ -283,6 +264,11 @@ def main():
                 st.session_state.messages = []
                 st.session_state.vectorstore = None
                 st.session_state.file_status = []
+                
+                # --- THE FIX: The Anti-Race-Condition Pause ---
+                with st.spinner("Closing session securely..."):
+                    time.sleep(0.6) 
+                
                 st.rerun()
                 
             st.markdown("---")
