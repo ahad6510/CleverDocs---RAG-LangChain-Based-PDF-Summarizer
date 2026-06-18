@@ -76,7 +76,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- LOGIC FUNCTIONS (RESTORED) ---
+# --- LOGIC FUNCTIONS ---
 def get_pdf_text(pdf_docs):
     text = ""
     file_status = [] 
@@ -198,14 +198,23 @@ def main():
                 st.markdown("### Secure Login Required")
                 st.markdown("<p style='color: #a1a1aa; margin-bottom: 20px;'>Sign in to access document analysis tools.</p>", unsafe_allow_html=True)
                 
-                result = oauth2.authorize_button(
-                    name="Continue with Google",
-                    icon="https://www.google.com/favicon.ico",
-                    redirect_uri=redirect_uri,
-                    scope="openid email profile",
-                    key="google_login",
-                    use_container_width=True
-                )
+                # --- NEW: Try/Except Block for OAuth Crashes ---
+                result = None
+                try:
+                    result = oauth2.authorize_button(
+                        name="Continue with Google",
+                        icon="https://www.google.com/favicon.ico",
+                        redirect_uri=redirect_uri,
+                        scope="openid email profile",
+                        key="google_login",
+                        use_container_width=True
+                    )
+                except Exception as e:
+                    st.error("⚠️ Login session expired or invalid state. Resetting...")
+                    st.query_params.clear()
+                    time.sleep(1.5)
+                    st.rerun()
+                    
                 st.markdown('</div>', unsafe_allow_html=True)
                 
                 if result and 'token' in result:
@@ -222,9 +231,14 @@ def main():
                         st.session_state.user_name = google_name
                     
                     if cookies is not None:
-                        cookies.set("user_email", st.session_state.user_email, max_age=604800)
-                        cookies.set("user_name", st.session_state.user_name, max_age=604800)
-                        cookies.set("user_picture", st.session_state.user_picture, max_age=604800)
+                        # --- NEW: Try/Except to prevent frontend sync crashes ---
+                        try:
+                            cookies.set("user_email", st.session_state.user_email, max_age=604800)
+                            cookies.set("user_name", st.session_state.user_name, max_age=604800)
+                            cookies.set("user_picture", st.session_state.user_picture, max_age=604800)
+                        except Exception:
+                            # If frontend hasn't synced the cookie dict yet, ignore it
+                            pass
                     
                     st.query_params.clear()
                     st.rerun()
