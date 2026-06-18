@@ -161,8 +161,18 @@ def main():
             saved_email = cookies.get("user_email")
             if saved_email:
                 st.session_state.user_email = saved_email
-                st.session_state.user_name = cookies.get("user_name")
-                st.session_state.user_picture = cookies.get("user_picture")
+                
+                # Try to fetch name and pic, but provide a safe fallback if the browser rejected them
+                fetched_name = cookies.get("user_name")
+                fetched_pic = cookies.get("user_picture")
+                
+                # Reconstruct your specific profile if the cookies are missing
+                if saved_email == "khanahad6510@gmail.com":
+                    st.session_state.user_name = fetched_name if fetched_name else "Abdul Ahad Khan (24BCD002)"
+                else:
+                    st.session_state.user_name = fetched_name if fetched_name else "Authorized User"
+                    
+                st.session_state.user_picture = fetched_pic if fetched_pic else "https://www.w3schools.com/howto/img_avatar.png"
         except Exception:
             pass
 
