@@ -4,7 +4,7 @@ import jwt
 import tempfile
 import json
 import time
-import urllib.parse  # <-- NEW: Required to safely encode names/URLs in cookies
+import urllib.parse
 from datetime import date
 from dotenv import load_dotenv
 import pdfplumber
@@ -159,23 +159,13 @@ def main():
     # --- CHECK BROWSER COOKIES FOR EXISTING LOGIN ---
     if st.session_state.user_email is None and cookies is not None:
         try:
-            saved_email = cookies.get("user_email")
-            if saved_email:
-                st.session_state.user_email = saved_email
-                
-                # Fetch encoded cookies and decode them safely
-                fetched_name = cookies.get("user_name")
-                fetched_pic = cookies.get("user_picture")
-                
-                if fetched_name:
-                    st.session_state.user_name = urllib.parse.unquote(fetched_name)
-                else:
-                    st.session_state.user_name = "Abdul Ahad Khan (24BCD002)" if saved_email == "khanahad6510@gmail.com" else "Authorized User"
-                    
-                if fetched_pic:
-                    st.session_state.user_picture = urllib.parse.unquote(fetched_pic)
-                else:
-                    st.session_state.user_picture = "https://www.w3schools.com/howto/img_avatar.png"
+            # Look for the new SINGLE master cookie
+            raw_cookie = cookies.get("cleverdocs_session")
+            if raw_cookie:
+                decoded_data = json.loads(urllib.parse.unquote(raw_cookie))
+                st.session_state.user_email = decoded_data.get("email")
+                st.session_state.user_name = decoded_data.get("name", "Authorized User")
+                st.session_state.user_picture = decoded_data.get("picture", "https://www.w3schools.com/howto/img_avatar.png")
         except Exception:
             pass
 
@@ -202,7 +192,6 @@ def main():
             TOKEN_URL = "https://oauth2.googleapis.com/token"
             REFRESH_TOKEN_URL = "https://oauth2.googleapis.com/token"
             
-            # None replaces REVOKE_TOKEN_URL to fix httpx_oauth error
             oauth2 = OAuth2Component(client_id, client_secret, AUTHORIZE_URL, TOKEN_URL, REFRESH_TOKEN_URL, None)
             
             col1, col2, col3 = st.columns([1, 2, 1])
@@ -211,7 +200,6 @@ def main():
                 st.markdown("### Secure Login Required")
                 st.markdown("<p style='color: #a1a1aa; margin-bottom: 20px;'>Sign in to access document analysis tools.</p>", unsafe_allow_html=True)
                 
-                # --- NEW: Try/Except Block for OAuth Crashes ---
                 result = None
                 try:
                     result = oauth2.authorize_button(
@@ -244,14 +232,19 @@ def main():
                         st.session_state.user_name = google_name
                     
                     if cookies is not None:
-                        # --- CRITICAL FIX: Encode special characters before saving to cookies ---
+                        # --- CRITICAL FIX: The Master Cookie Protocol ---
                         try:
-                            encoded_name = urllib.parse.quote(st.session_state.user_name)
-                            encoded_pic = urllib.parse.quote(st.session_state.user_picture)
+                            # Pack all data into ONE dictionary
+                            session_data = {
+                                "email": st.session_state.user_email,
+                                "name": st.session_state.user_name,
+                                "picture": st.session_state.user_picture
+                            }
+                            # Convert dict to a secure JSON string
+                            encoded_data = urllib.parse.quote(json.dumps(session_data))
                             
-                            cookies.set("user_email", st.session_state.user_email, max_age=604800, path="/")
-                            cookies.set("user_name", encoded_name, max_age=604800, path="/")
-                            cookies.set("user_picture", encoded_pic, max_age=604800, path="/")
+                            # Send ONE single command to the browser
+                            cookies.set("cleverdocs_session", encoded_data, max_age=604800, path="/")
                             
                             time.sleep(0.6)
                         except Exception:
@@ -283,11 +276,13 @@ def main():
                 # --- SAFELY DELETE COOKIES ON LOGOUT ---
                 if cookies is not None:
                     try:
-                        cookie_keys = ["user_email", "user_name", "user_picture"]
-                        for key in cookie_keys:
-                            cookies.remove(key)
+                        # Clear the new master cookie, and scrub any old individual ones
+                        cookies.remove("cleverdocs_session")
+                        cookies.remove("user_email")
+                        cookies.remove("user_name")
+                        cookies.remove("user_picture")
                     except Exception:
-                        pass # Ignore ANY cookie deletion errors in cloud
+                        pass
                 
                 st.session_state.user_email = None
                 st.session_state.user_name = None
@@ -296,7 +291,6 @@ def main():
                 st.session_state.vectorstore = None
                 st.session_state.file_status = []
                 
-                # --- THE FIX: The Anti-Race-Condition Pause ---
                 with st.spinner("Closing session securely..."):
                     time.sleep(0.6) 
                 
