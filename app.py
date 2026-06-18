@@ -237,7 +237,6 @@ def main():
                             cookies.set("user_name", st.session_state.user_name, max_age=604800)
                             cookies.set("user_picture", st.session_state.user_picture, max_age=604800)
                         except Exception:
-                            # If frontend hasn't synced the cookie dict yet, ignore it
                             pass
                     
                     st.query_params.clear()
@@ -263,14 +262,14 @@ def main():
             st.markdown(profile_html, unsafe_allow_html=True)
             
             if st.button("🚪 Secure Logout", use_container_width=True):
-                # --- SAFELY DELETE COOKIES ON LOGOUT ---
+                # --- SAFELY DELETE COOKIES ON LOGOUT (FIXED EXCEPTION) ---
                 if cookies is not None:
-                    cookie_keys = ["user_email", "user_name", "user_picture"]
-                    for key in cookie_keys:
-                        try:
+                    try:
+                        cookie_keys = ["user_email", "user_name", "user_picture"]
+                        for key in cookie_keys:
                             cookies.remove(key)
-                        except KeyError:
-                            pass
+                    except Exception:
+                        pass # Ignore ANY cookie deletion errors in cloud
                 
                 st.session_state.user_email = None
                 st.session_state.user_name = None
