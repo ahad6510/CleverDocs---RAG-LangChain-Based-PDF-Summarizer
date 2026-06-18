@@ -175,7 +175,7 @@ def main():
             st.session_state.cookie_sync_done = True
             st.markdown('<div class="neon-text">⚡ CleverDocs</div>', unsafe_allow_html=True)
             with st.spinner("Verifying secure connection..."):
-                time.sleep(0.6)  
+                time.sleep(1.5)  
             st.rerun()  
         
         else:
