@@ -417,7 +417,12 @@ def main():
                                 update_global_quota(st.session_state.quota_left)
                                 
                         except Exception as e:
-                            full_response = f"Error: {str(e)}"
+                            error_msg = str(e)
+                            # Instantly catch the Gemini capacity spike and inform the user accurately
+                            if "503" in error_msg or "UNAVAILABLE" in error_msg:
+                                full_response = "⚠️ **Google Gemini API is currently at peak capacity.** \n\nCleverDocs is fully online, but our underlying AI provider is temporarily overloaded. Please try asking your question again in a few minutes!"
+                            else:
+                                full_response = f"⚠️ System Error: {error_msg}"
                     
                     message_placeholder.markdown(full_response)
                     st.session_state.messages.append({"role": "assistant", "content": full_response})
