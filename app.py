@@ -231,11 +231,14 @@ def main():
                         st.session_state.user_name = google_name
                     
                     if cookies is not None:
-                        # --- NEW: Try/Except to prevent frontend sync crashes ---
+                        # --- CRITICAL FIX: Add path="/" and a sleep timer for Phantom Cookies ---
                         try:
-                            cookies.set("user_email", st.session_state.user_email, max_age=604800)
-                            cookies.set("user_name", st.session_state.user_name, max_age=604800)
-                            cookies.set("user_picture", st.session_state.user_picture, max_age=604800)
+                            cookies.set("user_email", st.session_state.user_email, max_age=604800, path="/")
+                            cookies.set("user_name", st.session_state.user_name, max_age=604800, path="/")
+                            cookies.set("user_picture", st.session_state.user_picture, max_age=604800, path="/")
+                            
+                            # Give the browser time to save the files!
+                            time.sleep(0.6)
                         except Exception:
                             pass
                     
@@ -262,7 +265,7 @@ def main():
             st.markdown(profile_html, unsafe_allow_html=True)
             
             if st.button("🚪 Secure Logout", use_container_width=True):
-                # --- SAFELY DELETE COOKIES ON LOGOUT (FIXED EXCEPTION) ---
+                # --- SAFELY DELETE COOKIES ON LOGOUT ---
                 if cookies is not None:
                     try:
                         cookie_keys = ["user_email", "user_name", "user_picture"]
