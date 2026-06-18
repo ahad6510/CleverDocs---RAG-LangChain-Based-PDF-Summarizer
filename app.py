@@ -4,6 +4,7 @@ import jwt
 import tempfile
 import json
 import time
+import urllib.parse  # <-- NEW: Required to safely encode names/URLs in cookies
 from datetime import date
 from dotenv import load_dotenv
 import pdfplumber
@@ -162,17 +163,19 @@ def main():
             if saved_email:
                 st.session_state.user_email = saved_email
                 
-                # Try to fetch name and pic, but provide a safe fallback if the browser rejected them
+                # Fetch encoded cookies and decode them safely
                 fetched_name = cookies.get("user_name")
                 fetched_pic = cookies.get("user_picture")
                 
-                # Reconstruct your specific profile if the cookies are missing
-                if saved_email == "khanahad6510@gmail.com":
-                    st.session_state.user_name = fetched_name if fetched_name else "Abdul Ahad Khan (24BCD002)"
+                if fetched_name:
+                    st.session_state.user_name = urllib.parse.unquote(fetched_name)
                 else:
-                    st.session_state.user_name = fetched_name if fetched_name else "Authorized User"
+                    st.session_state.user_name = "Abdul Ahad Khan (24BCD002)" if saved_email == "khanahad6510@gmail.com" else "Authorized User"
                     
-                st.session_state.user_picture = fetched_pic if fetched_pic else "https://www.w3schools.com/howto/img_avatar.png"
+                if fetched_pic:
+                    st.session_state.user_picture = urllib.parse.unquote(fetched_pic)
+                else:
+                    st.session_state.user_picture = "https://www.w3schools.com/howto/img_avatar.png"
         except Exception:
             pass
 
@@ -241,13 +244,15 @@ def main():
                         st.session_state.user_name = google_name
                     
                     if cookies is not None:
-                        # --- CRITICAL FIX: Add path="/" and a sleep timer for Phantom Cookies ---
+                        # --- CRITICAL FIX: Encode special characters before saving to cookies ---
                         try:
-                            cookies.set("user_email", st.session_state.user_email, max_age=604800, path="/")
-                            cookies.set("user_name", st.session_state.user_name, max_age=604800, path="/")
-                            cookies.set("user_picture", st.session_state.user_picture, max_age=604800, path="/")
+                            encoded_name = urllib.parse.quote(st.session_state.user_name)
+                            encoded_pic = urllib.parse.quote(st.session_state.user_picture)
                             
-                            # Give the browser time to save the files!
+                            cookies.set("user_email", st.session_state.user_email, max_age=604800, path="/")
+                            cookies.set("user_name", encoded_name, max_age=604800, path="/")
+                            cookies.set("user_picture", encoded_pic, max_age=604800, path="/")
+                            
                             time.sleep(0.6)
                         except Exception:
                             pass
