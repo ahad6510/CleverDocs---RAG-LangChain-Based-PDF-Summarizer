@@ -46,12 +46,14 @@ groq_api_key = os.getenv("GROQ_API_KEY")
 client_id = os.getenv("GOOGLE_CLIENT_ID")
 client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
 redirect_uri = os.getenv("REDIRECT_URI", "http://localhost:8501/component/streamlit_oauth.authorize_button")
+groq_model = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b") # Fallback included safely here!
 
 if not groq_api_key and "GROQ_API_KEY" in st.secrets:
     groq_api_key = st.secrets["GROQ_API_KEY"]
     client_id = st.secrets.get("GOOGLE_CLIENT_ID", client_id)
     client_secret = st.secrets.get("GOOGLE_CLIENT_SECRET", client_secret)
     redirect_uri = st.secrets.get("REDIRECT_URI", redirect_uri)
+    groq_model = st.secrets.get("GROQ_MODEL", groq_model) # Cloud Secret fallback
 
 if not groq_api_key:
     st.error("CRITICAL ERROR: GROQ_API_KEY not found in environment variables.")
@@ -383,7 +385,7 @@ CRITICAL RULES:
                         
                         try:
                             response = groq_client.chat.completions.create(
-                                model="openai/gpt-oss-120b", 
+                                model=groq_model, 
                                 messages=[
                                     {"role": "system", "content": system_prompt},
                                     {"role": "user", "content": user_payload}
