@@ -1,6 +1,4 @@
-Here is the updated README tailored exactly to your new Google-free inference and local OCR architecture. It reflects the switch to Groq and RapidOCR while maintaining the premium styling of your original draft.
 
----
 
 # ⚡ CleverDocs: Intelligent RAG & AI-Powered Document Analysis
 
