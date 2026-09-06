@@ -13,4 +13,3 @@ faiss-cpu
 streamlit-oauth
 streamlit-cookies-controller
 pyjwt
-opencv-python-headless
